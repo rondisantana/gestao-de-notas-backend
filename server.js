@@ -1,11 +1,13 @@
 const express = require("express");
 const cors = require("cors");
-const { Low, JSONFile } = require("lowdb");
+// CORREÇÃO CRÍTICA: O lowdb moderno exige que os adaptadores sejam importados explicitamente
+const { Low } = require("lowdb");
+const { JSONFile } = require("lowdb/node"); // Importação correta do adaptador
 const path = require("path");
 
 // --- CONFIGURAÇÃO DO LOWDB (BANCO DE DADOS EM ARQUIVO JSON) ---
 const file = path.join(__dirname, "db.json");
-const adapter = new JSONFile(file);
+const adapter = new JSONFile(file); // JSONFile agora é um construtor
 const db = new Low(adapter);
 
 // --- DADOS INICIAIS ---
@@ -30,13 +32,15 @@ async function initializeDBAndStartServer() {
   // Garante que db.data.alunos é o array que usaremos
   const alunos = db.data.alunos;
 
+  // Usa a porta fornecida pelo Render (ou 5000 localmente)
   const app = express();
-  const port = process.env.PORT || 5000; // Usa a porta do ambiente (para Render/Heroku) ou 5000
+  const port = process.env.PORT || 5000;
 
   // --- MIDDLEWARES ---
   app.use(express.json());
 
   // Configuração do CORS para produção e desenvolvimento
+  // Usa a variável de ambiente CORS_ORIGIN definida no Render
   const allowedOrigin = process.env.CORS_ORIGIN || "http://localhost:3000";
   app.use(cors({ origin: allowedOrigin }));
 
@@ -123,5 +127,3 @@ async function initializeDBAndStartServer() {
 
 // Chama a função principal para iniciar tudo
 initializeDBAndStartServer().catch(console.error);
-
-// Fim do arquivo
