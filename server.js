@@ -1,8 +1,9 @@
+// IMPORTAÇÕES
 const express = require("express");
 const cors = require("cors");
-// CORREÇÃO CRÍTICA: O lowdb moderno exige que os adaptadores sejam importados explicitamente
+// CORREÇÃO CRÍTICA DO LOWDB: Importa o adaptador do local correto
 const { Low } = require("lowdb");
-const { JSONFile } = require("lowdb/node"); // Importação correta do adaptador
+const { JSONFile } = require("lowdb/node");
 const path = require("path");
 
 // --- CONFIGURAÇÃO DO LOWDB (BANCO DE DADOS EM ARQUIVO JSON) ---
@@ -19,7 +20,7 @@ const defaultData = {
   nextId: 3,
 };
 
-// --- FUNÇÃO DE INICIALIZAÇÃO DO SERVIDOR ---
+// --- FUNÇÃO PRINCIPAL DE INICIALIZAÇÃO DO SERVIDOR ---
 async function initializeDBAndStartServer() {
   await db.read();
 
@@ -32,7 +33,7 @@ async function initializeDBAndStartServer() {
   // Garante que db.data.alunos é o array que usaremos
   const alunos = db.data.alunos;
 
-  // Usa a porta fornecida pelo Render (ou 5000 localmente)
+  // Usa a porta fornecida pelo Render (process.env.PORT) ou 5000 localmente
   const app = express();
   const port = process.env.PORT || 5000;
 
@@ -40,23 +41,17 @@ async function initializeDBAndStartServer() {
   app.use(express.json());
 
   // Configuração do CORS para produção e desenvolvimento
-  // Usa a variável de ambiente CORS_ORIGIN definida no Render
   const allowedOrigin = process.env.CORS_ORIGIN || "http://localhost:3000";
   app.use(cors({ origin: allowedOrigin }));
 
   // ----------------------------------------------------------------------------------
-  // ROTA PRINCIPAL: Teste simples
-  app.get("/", (req, res) => {
-    res.send("Servidor Node.js (API REST de Notas) rodando!");
-  });
+  // ROTAS DA API
 
-  // ----------------------------------------------------------------------------------
   // ROTA 1: Obter a lista completa de alunos (GET /api/alunos)
   app.get("/api/alunos", (req, res) => {
     res.json(alunos);
   });
 
-  // ----------------------------------------------------------------------------------
   // ROTA 2: Adicionar um novo aluno (POST /api/alunos)
   app.post("/api/alunos", async (req, res) => {
     const novoAlunoNome = req.body.nome;
@@ -76,7 +71,6 @@ async function initializeDBAndStartServer() {
     res.status(201).json(novoAluno);
   });
 
-  // ----------------------------------------------------------------------------------
   // ROTA 3: Adicionar nota a um aluno específico (PUT /api/alunos/:id/notas)
   app.put("/api/alunos/:id/notas", async (req, res) => {
     const alunoId = parseInt(req.params.id);
@@ -100,7 +94,6 @@ async function initializeDBAndStartServer() {
     res.json(alunos[alunoIndex]);
   });
 
-  // ----------------------------------------------------------------------------------
   // ROTA 4: Excluir um aluno (DELETE /api/alunos/:id)
   app.delete("/api/alunos/:id", async (req, res) => {
     const alunoId = parseInt(req.params.id);
