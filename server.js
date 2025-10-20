@@ -1,26 +1,26 @@
 // Importação dos módulos necessários
 const express = require("express");
 const cors = require("cors");
-// CORREÇÃO CRÍTICA DO LOWDB: Agora importa a base Low e o adaptador JSONFile corretamente para o Render
+// CORREÇÃO CRÍTICA DO LOWDB: Importa o adaptador do local correto para o Render
 const { Low } = require("lowdb");
-const { JSONFile } = require("lowdb/node");
-const path = require("path");
+const { JSONFile } = require("lowdb/node"); // <-- Linha corrigida
+const path = require("path"); // Necessário para encontrar o db.json
 
 // --- CONFIGURAÇÃO DA PERSISTÊNCIA ---
-// O Render e outras plataformas de nuvem definem a porta via variável de ambiente.
-const port = process.env.PORT || 5000;
 const app = express();
+// Usa a porta fornecida pelo Render (process.env.PORT) ou 5000 localmente
+const port = process.env.PORT || 5000;
 
-// Configuração do LowDB para persistência de dados
+// Configuração do LowDB
 const file = path.join(__dirname, "db.json");
 const adapter = new JSONFile(file);
-const db = new Low(adapter); // Inicialização simples do db
+const db = new Low(adapter);
 
 // Função para inicializar o banco de dados com valores padrão
 async function initializeDatabase() {
-  await db.read(); // Lê o estado atual do banco de dados
+  await db.read();
 
-  // Dados Padrão (necessários se db.json não existir)
+  // Dados Padrão (para inicializar, se o arquivo db.json não existir)
   const defaultData = {
     alunos: [
       { id: 1, nome: "João Silva", notas: [8.5, 7.0, 9.5] },
@@ -29,22 +29,23 @@ async function initializeDatabase() {
     nextId: 3,
   };
 
-  // Se não houver dados, inicializa com o defaultData
+  // Se não houver dados, inicializa com o defaultData.
   db.data = db.data || defaultData;
-  await db.write(); // Salva o estado inicial
+  await db.write();
 }
 
-// Chama a função de inicialização, garantindo que ela rode antes do listen
+// Chama a função de inicialização
 initializeDatabase().catch(console.error);
 
 // Middlewares essenciais
-// Configuração do CORS para o Vercel ou localhost
+// Configuração do CORS para o URL Vercel (process.env.CORS_ORIGIN) ou localhost
 const allowedOrigin = process.env.CORS_ORIGIN || "http://localhost:3000";
 app.use(cors({ origin: allowedOrigin }));
-app.use(express.json()); // Habilita o parsing de JSON
+app.use(express.json());
 
-// --- Definição das Rotas da API REST ---
+// --- Definição das Rotas da API REST (GET e POST) ---
 
+// Rota principal para verificar se o servidor está no ar
 app.get("/", (req, res) => {
   res.send("Servidor Node.js para gestão de alunos está rodando!");
 });
