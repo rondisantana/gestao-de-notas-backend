@@ -3,8 +3,8 @@ const express = require("express");
 const cors = require("cors");
 // CORREÇÃO CRÍTICA DO LOWDB: Importa o adaptador do local correto para o Render
 const { Low } = require("lowdb");
-const { JSONFile } = require("lowdb/node"); // <-- Linha corrigida
-const path = require("path"); // Necessário para encontrar o db.json
+const { JSONFile } = require("lowdb/node"); // Importação que funciona com Render
+const path = require("path");
 
 // --- CONFIGURAÇÃO DA PERSISTÊNCIA ---
 const app = express();
@@ -13,24 +13,29 @@ const port = process.env.PORT || 5000;
 
 // Configuração do LowDB
 const file = path.join(__dirname, "db.json");
-const adapter = new JSONFile(file);
-const db = new Low(adapter);
 
-// Função para inicializar o banco de dados com valores padrão
+// Dados Padrão (para inicializar, se o arquivo db.json não existir)
+const defaultData = {
+  alunos: [
+    { id: 1, nome: "João Silva", notas: [8.5, 7.0, 9.5] },
+    { id: 2, nome: "Maria Oliveira", notas: [6.0, 7.5] },
+  ],
+  nextId: 3,
+};
+
+// CRÍTICO: Passamos o defaultData diretamente na inicialização do Low
+const adapter = new JSONFile(file);
+const db = new Low(adapter, defaultData);
+
+// Função para inicializar o banco de dados
 async function initializeDatabase() {
   await db.read();
 
-  // Dados Padrão (para inicializar, se o arquivo db.json não existir)
-  const defaultData = {
-    alunos: [
-      { id: 1, nome: "João Silva", notas: [8.5, 7.0, 9.5] },
-      { id: 2, nome: "Maria Oliveira", notas: [6.0, 7.5] },
-    ],
-    nextId: 3,
-  };
+  // Se o db.json existir, mas for inválido (por exemplo, esvaziado), garantimos o defaultData
+  if (!db.data || !db.data.alunos) {
+    db.data = defaultData;
+  }
 
-  // Se não houver dados, inicializa com o defaultData.
-  db.data = db.data || defaultData;
   await db.write();
 }
 
@@ -69,7 +74,8 @@ app.post("/api/alunos", async (req, res) => {
   const alunos = db.data.alunos;
 
   const novoAluno = {
-    id: db.data.nextId++,
+    // Gera um ID simples baseado no timestamp para identificar cada aluno
+    id: Date.now().toString(),
     nome: req.body.nome,
     notas: [],
   };
