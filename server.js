@@ -4,7 +4,7 @@ const cors = require("cors");
 // CORREÇÃO CRÍTICA DO LOWDB: Importa o adaptador do local correto para o Render
 const { Low } = require("lowdb");
 const { JSONFile } = require("lowdb/node"); // Importação que funciona com Render
-const path = require("path");
+const path = require("path"); // Necessário para usar o path.join()
 
 // --- CONFIGURAÇÃO DA PERSISTÊNCIA ---
 const app = express();
@@ -31,11 +31,8 @@ const db = new Low(adapter, defaultData);
 async function initializeDatabase() {
   await db.read();
 
-  // Se o db.json existir, mas for inválido (por exemplo, esvaziado), garantimos o defaultData
-  if (!db.data || !db.data.alunos) {
-    db.data = defaultData;
-  }
-
+  // Se o db.json existir, mas for inválido, garantimos o defaultData.
+  db.data = db.data || defaultData;
   await db.write();
 }
 
@@ -49,6 +46,7 @@ app.use(cors({ origin: allowedOrigin }));
 app.use(express.json());
 
 // --- Definição das Rotas da API REST (GET e POST) ---
+// CORREÇÃO FINAL: As rotas devem ser /api/alunos para combinar com o FRONT-END!
 
 // Rota principal para verificar se o servidor está no ar
 app.get("/", (req, res) => {
@@ -74,8 +72,7 @@ app.post("/api/alunos", async (req, res) => {
   const alunos = db.data.alunos;
 
   const novoAluno = {
-    // Gera um ID simples baseado no timestamp para identificar cada aluno
-    id: Date.now().toString(),
+    id: db.data.nextId++,
     nome: req.body.nome,
     notas: [],
   };
