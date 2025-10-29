@@ -145,32 +145,30 @@ app.post("/api/alunos/:id/disciplinas", async (req, res) => {
 app.post(
   "/api/alunos/:id/disciplinas/:disciplinaNome/notas",
   async (req, res) => {
-    await db.read();
+    // 1. Decodifica o nome da disciplina (CORREÇÃO CRÍTICA)
     const alunoId = parseInt(req.params.id);
-    const disciplinaNome = req.params.disciplinaNome;
+    const disciplinaNomeEncoded = req.params.disciplinaNome;
+    const disciplinaNome = decodeURIComponent(disciplinaNomeEncoded); // <<-- AQUI ESTÁ A CORREÇÃO
+
+    // 2. Leitura dos dados
+    await db.read();
     const aluno = db.data.alunos.find((a) => a.id === alunoId);
 
-    if (!aluno) return res.status(404).send("Aluno não encontrado");
-
-    // Usamos encodeURI para garantir que espaços e caracteres especiais sejam tratados
-    const disciplina = aluno.disciplinas.find(
-      (d) => encodeURI(d.nome).toLowerCase() === disciplinaNome.toLowerCase()
-    );
-
-    if (!disciplina) return res.status(404).send("Disciplina não encontrada");
+    // Validação
+    if (!aluno) return res.status(404).json("Aluno não encontrado");
+    const disciplina = aluno.disciplinas.find((d) => d.nome === disciplinaNome);
+    if (!disciplina) return res.status(404).json("Disciplina não encontrada");
 
     const { nota } = req.body;
-    const notaFloat = parseFloat(nota);
+    if (typeof nota !== "number" || nota < 0 || nota > 10)
+      return res.status(400).json("Nota deve ser um número entre 0 e 10.");
 
-    if (isNaN(notaFloat) || notaFloat < 0 || notaFloat > 10) {
-      return res.status(400).send("Nota deve ser um número entre 0 e 10.");
-    }
-
-    disciplina.notas.push(notaFloat);
+    // 3. Adiciona a nota e salva
+    disciplina.notas.push(nota);
     await db.write();
 
-    // Retorna o aluno completo para que o front-end possa atualizar o estado
-    res.status(201).json(aluno);
+    // 4. Retorna o aluno completo para o Front-End atualizar a lista
+    res.json(aluno);
   }
 );
 
