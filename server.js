@@ -172,46 +172,43 @@ app.post(
   }
 );
 
-// [PUT] /api/alunos/:id/disciplinas/:disciplinaNome/notas/:index - Altera uma nota lançada
+// [PUT] /api/alunos/:id/disciplinas/:disciplinaNome/notas/:index - Altera uma nota específica
 app.put(
   "/api/alunos/:id/disciplinas/:disciplinaNome/notas/:index",
   async (req, res) => {
-    await db.read();
+    // 1. Decodifica parâmetros
     const alunoId = parseInt(req.params.id);
-    const disciplinaNome = req.params.disciplinaNome;
-    const index = parseInt(req.params.index);
+    const disciplinaNome = decodeURIComponent(req.params.disciplinaNome);
+    const index = parseInt(req.params.index); // O índice da nota no array
+
+    // 2. Leitura dos dados
+    await db.read();
     const aluno = db.data.alunos.find((a) => a.id === alunoId);
 
-    if (!aluno) return res.status(404).send("Aluno não encontrado");
-
-    const disciplina = aluno.disciplinas.find(
-      (d) => encodeURI(d.nome).toLowerCase() === disciplinaNome.toLowerCase()
-    );
-
-    if (!disciplina) return res.status(404).send("Disciplina não encontrada.");
-
-    const { novaNota } = req.body;
-    const novaNotaFloat = parseFloat(novaNota);
-
     // Validação
-    if (isNaN(novaNotaFloat) || novaNotaFloat < 0 || novaNotaFloat > 10) {
-      return res.status(400).send("Nova nota deve ser um número entre 0 e 10.");
-    }
-    if (index < 0 || index >= disciplina.notas.length) {
-      return res.status(404).send("Índice da nota inválido.");
+    if (!aluno)
+      return res.status(404).json({ message: "Aluno não encontrado" });
+    const disciplina = aluno.disciplinas.find((d) => d.nome === disciplinaNome);
+    if (!disciplina)
+      return res.status(404).json({ message: "Disciplina não encontrada" });
+
+    // 3. Valida a nova nota e o índice
+    const { novaNota } = req.body;
+    if (typeof novaNota !== "number" || novaNota < 0 || novaNota > 10) {
+      return res
+        .status(400)
+        .json({ message: "Nova nota deve ser um número entre 0 e 10." });
     }
 
-    disciplina.notas[index] = novaNotaFloat;
+    if (index < 0 || index >= disciplina.notas.length) {
+      return res.status(404).json({ message: "Índice da nota inválido" });
+    }
+
+    // 4. Altera a nota no array
+    disciplina.notas[index] = novaNota;
     await db.write();
 
-    // Retorna o aluno completo
+    // 5. Retorna o aluno completo para o Front-End atualizar a lista
     res.json(aluno);
   }
 );
-// =========================================================
-
-// --- Inicialização do Servidor ---
-app.listen(port, () => {
-  // A mensagem de log foi corrigida para usar a variável 'port'
-  console.log(`Servidor rodando na porta ${port}`);
-});
