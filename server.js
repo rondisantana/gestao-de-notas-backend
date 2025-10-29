@@ -1,171 +1,150 @@
 // Importação dos módulos necessários
 const express = require("express");
 const cors = require("cors");
-const path = require("path"); // Necessário para manipulação de caminhos
-
-// --- CONFIGURAÇÃO DA PERSISTÊNCIA (usando LowDB V3 para async/await) ---
-// A LowDB V3 usa `JSONFile` e `Low`
 const { Low } = require("lowdb");
 const { JSONFile } = require("lowdb/node");
+const path = require("path");
 
-// Define o caminho do arquivo db.json
+// --- CONFIGURAÇÃO DA PERSISTÊNCIA ---
 const file = path.join(__dirname, "db.json");
-
-// Dados Padrão para inicializar o banco de dados
 const defaultData = {
-  // Atualizando o modelo de dados para suportar a nova estrutura de DISCIPLINAS
   alunos: [
     {
       id: 1,
       nome: "João Silva",
-      disciplinas: [{ nome: "Matemática", notas: [8.5, 7.0] }],
+      disciplinas: [
+        { nome: "Matemática", notas: [8.5, 7.0, 9.5] },
+        { nome: "Português", notas: [7.0, 8.0] },
+      ],
     },
     {
       id: 2,
       nome: "Maria Oliveira",
-      disciplinas: [{ nome: "Português", notas: [6.0, 7.5] }],
+      disciplinas: [{ nome: "História", notas: [6.0, 7.5, 5.5] }],
     },
   ],
   nextId: 3,
 };
 
-// CRÍTICO: Inicializamos o LowDB. O adapter é o 'JSONFile'.
 const adapter = new JSONFile(file);
 const db = new Low(adapter, defaultData);
 
-// Função para garantir que o banco de dados esteja lido e escrito (se for a primeira vez)
 async function initializeDatabase() {
   await db.read();
-  // Garante que db.data existe e, se estiver vazio/inválido, usa os dados padrão.
   db.data = db.data || defaultData;
   await db.write();
 }
-
-// Chama a função de inicialização
 initializeDatabase().catch(console.error);
-// --- FIM DA CONFIGURAÇÃO DA PERSISTÊNCIA ---
 
-// --- CONFIGURAÇÃO GERAL DO SERVIDOR ---
+// --- CONFIGURAÇÃO DO SERVIDOR ---
 const app = express();
-// Usa a porta fornecida pelo Render (process.env.PORT) ou 5000 localmente
 const port = process.env.PORT || 5000;
 
 // Middlewares essenciais
-// Configuração do CORS para o URL Vercel (process.env.CORS_ORIGIN) ou localhost
 const allowedOrigin = process.env.CORS_ORIGIN || "http://localhost:3000";
 app.use(cors({ origin: allowedOrigin }));
 app.use(express.json());
 
-// --- Definição das Rotas da API REST ---
-
-// Rota principal para verificar se o servidor está no ar
-app.get("/", (req, res) => {
-  res.send("Servidor Node.js para gestão de alunos está rodando!");
-});
+// --- DEFINIÇÃO DAS ROTAS DA API REST ---
 
 // [GET] /api/alunos - Retorna a lista de todos os alunos
 app.get("/api/alunos", async (req, res) => {
   await db.read();
   const { alunos } = db.data;
-  res.json(alunos);
+  // Garante que a estrutura disciplinas existe
+  const alunosComDisciplinas = alunos.map((aluno) => ({
+    ...aluno,
+    disciplinas: aluno.disciplinas || [],
+  }));
+  res.json(alunosComDisciplinas);
 });
 
 // [POST] /api/alunos - Adiciona um novo aluno
 app.post("/api/alunos", async (req, res) => {
   if (!req.body.nome || typeof req.body.nome !== "string") {
-    return res
-      .status(400)
-      .json({ message: "O nome do aluno é obrigatório e deve ser um texto." });
+    return res.status(400).json({ message: "O nome do aluno é obrigatório." });
   }
 
   await db.read();
   const alunos = db.data.alunos;
 
-  // Novo modelo deve inicializar disciplinas como um array vazio
   const novoAluno = {
     id: db.data.nextId++,
     nome: req.body.nome,
-    disciplinas: [], // <-- AQUI A MUDANÇA MAIS IMPORTANTE
+    disciplinas: [], // Novo aluno começa sem disciplinas
   };
 
   alunos.push(novoAluno);
-  await db.write();
-
+  await db.write(); // Garante a PERSISTÊNCIA
   res.status(201).json(novoAluno);
 });
 
 // [DELETE] /api/alunos/:id - Exclui um aluno
 app.delete("/api/alunos/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
+  const alunoId = parseInt(req.params.id);
   await db.read();
-
   const initialLength = db.data.alunos.length;
-  db.data.alunos = db.data.alunos.filter((aluno) => aluno.id !== id);
 
-  if (db.data.alunos.length === initialLength) {
-    return res.status(404).json({ message: "Aluno não encontrado." });
+  db.data.alunos = db.data.alunos.filter((a) => a.id !== alunoId);
+
+  if (db.data.alunos.length < initialLength) {
+    await db.write();
+    return res.status(204).send(); // 204 No Content para exclusão bem-sucedida
   }
-
-  await db.write();
-  res.status(204).send();
+  res.status(404).json({ message: "Aluno não encontrado." });
 });
 
-// =========================================================
-// NOVOS ENDPOINTS DO CAPÍTULO 7 (Disciplinas e Notas)
-// =========================================================
-
-// [POST] /api/alunos/:id/disciplinas - Adiciona uma disciplina a um aluno
+// [POST] /api/alunos/:id/disciplinas - Adiciona uma nova disciplina
 app.post("/api/alunos/:id/disciplinas", async (req, res) => {
-  await db.read();
   const alunoId = parseInt(req.params.id);
+  await db.read();
   const aluno = db.data.alunos.find((a) => a.id === alunoId);
 
-  if (!aluno) return res.status(404).send("Aluno não encontrado");
-
+  if (!aluno) return res.status(404).json({ message: "Aluno não encontrado" });
   const { nome } = req.body;
-  if (!nome) return res.status(400).send("Nome da disciplina obrigatório");
+  if (!nome)
+    return res.status(400).json({ message: "Nome da disciplina obrigatório" });
 
   aluno.disciplinas = aluno.disciplinas || [];
 
-  // Checa se a disciplina já existe
-  if (
-    aluno.disciplinas.some((d) => d.nome.toLowerCase() === nome.toLowerCase())
-  ) {
-    return res.status(400).send("Disciplina já cadastrada para este aluno");
+  // Evita duplicidade de disciplina
+  if (aluno.disciplinas.some((d) => d.nome === nome)) {
+    return res.status(409).json({ message: "Disciplina já existe" });
   }
 
   aluno.disciplinas.push({ nome, notas: [] });
-  await db.write();
-
-  // Retorna o aluno completo para que o front-end possa atualizar o estado
-  res.status(201).json(aluno);
+  await db.write(); // Garante a PERSISTÊNCIA
+  res.status(201).json(aluno); // Retorna o aluno completo
 });
 
-// [POST] /api/alunos/:id/disciplinas/:disciplinaNome/notas - Lança nota em uma disciplina
+// [POST] /api/alunos/:id/disciplinas/:disciplinaNome/notas - Lança uma nota
 app.post(
   "/api/alunos/:id/disciplinas/:disciplinaNome/notas",
   async (req, res) => {
     // 1. Decodifica o nome da disciplina (CORREÇÃO CRÍTICA)
     const alunoId = parseInt(req.params.id);
     const disciplinaNomeEncoded = req.params.disciplinaNome;
-    const disciplinaNome = decodeURIComponent(disciplinaNomeEncoded); // <<-- AQUI ESTÁ A CORREÇÃO
+    const disciplinaNome = decodeURIComponent(disciplinaNomeEncoded); // <<-- CORREÇÃO AQUI
 
-    // 2. Leitura dos dados
+    // 2. Leitura e Validação
     await db.read();
     const aluno = db.data.alunos.find((a) => a.id === alunoId);
 
-    // Validação
-    if (!aluno) return res.status(404).json("Aluno não encontrado");
+    if (!aluno)
+      return res.status(404).json({ message: "Aluno não encontrado" });
     const disciplina = aluno.disciplinas.find((d) => d.nome === disciplinaNome);
-    if (!disciplina) return res.status(404).json("Disciplina não encontrada");
+    if (!disciplina)
+      return res.status(404).json({ message: "Disciplina não encontrada" });
 
     const { nota } = req.body;
     if (typeof nota !== "number" || nota < 0 || nota > 10)
-      return res.status(400).json("Nota deve ser um número entre 0 e 10.");
+      return res
+        .status(400)
+        .json({ message: "Nota deve ser um número entre 0 e 10." });
 
     // 3. Adiciona a nota e salva
     disciplina.notas.push(nota);
-    await db.write();
+    await db.write(); // Garante a PERSISTÊNCIA
 
     // 4. Retorna o aluno completo para o Front-End atualizar a lista
     res.json(aluno);
@@ -176,16 +155,16 @@ app.post(
 app.put(
   "/api/alunos/:id/disciplinas/:disciplinaNome/notas/:index",
   async (req, res) => {
-    // 1. Decodifica parâmetros
+    // 1. Decodifica parâmetros (CORREÇÃO CRÍTICA)
     const alunoId = parseInt(req.params.id);
-    const disciplinaNome = decodeURIComponent(req.params.disciplinaNome);
-    const index = parseInt(req.params.index); // O índice da nota no array
+    const disciplinaNomeEncoded = req.params.disciplinaNome;
+    const disciplinaNome = decodeURIComponent(disciplinaNomeEncoded); // <<-- CORREÇÃO AQUI
+    const index = parseInt(req.params.index);
 
-    // 2. Leitura dos dados
+    // 2. Leitura e Validação
     await db.read();
     const aluno = db.data.alunos.find((a) => a.id === alunoId);
 
-    // Validação
     if (!aluno)
       return res.status(404).json({ message: "Aluno não encontrado" });
     const disciplina = aluno.disciplinas.find((d) => d.nome === disciplinaNome);
@@ -204,11 +183,21 @@ app.put(
       return res.status(404).json({ message: "Índice da nota inválido" });
     }
 
-    // 4. Altera a nota no array
+    // 4. Altera a nota no array e salva
     disciplina.notas[index] = novaNota;
-    await db.write();
+    await db.write(); // Garante a PERSISTÊNCIA
 
-    // 5. Retorna o aluno completo para o Front-End atualizar a lista
+    // 5. Retorna o aluno completo
     res.json(aluno);
   }
 );
+
+// Rota principal para verificar se o servidor está no ar
+app.get("/", (req, res) => {
+  res.send("Servidor Node.js para gestão de alunos está rodando!");
+});
+
+// --- Inicialização do Servidor ---
+app.listen(port, () => {
+  console.log(`Servidor rodando na porta ${port}`);
+});
